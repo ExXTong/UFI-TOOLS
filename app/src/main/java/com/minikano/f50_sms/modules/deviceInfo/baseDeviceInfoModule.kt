@@ -598,4 +598,32 @@ fun Route.baseDeviceInfoModule(context: Context) {
             )
         }
     }
+
+    //读取ARP表，用于回填未走DHCP（如静态IP）客户端的IP
+    get("/api/arp_table") {
+        try {
+            val arr = JSONArray()
+            java.io.File("/proc/net/arp").readLines().drop(1).forEach { line ->
+                val parts = line.trim().split(Regex("\\s+"))
+                if (parts.size >= 6) {
+                    val ip = parts[0]
+                    val mac = parts[3].lowercase()
+                    val dev = parts[5]
+                    if (mac.matches(Regex("([0-9a-f]{2}:){5}[0-9a-f]{2}")) && mac != "00:00:00:00:00:00") {
+                        arr.put(JSONObject().put("ip", ip).put("mac", mac).put("iface", dev))
+                    }
+                }
+            }
+            call.response.headers.append("Access-Control-Allow-Origin", "*")
+            call.respondText(JSONObject().put("arp", arr).toString(), ContentType.Application.Json)
+        } catch (e: Exception) {
+            KanoLog.d(TAG, "arp_table出错：${e.message}")
+            call.response.headers.append("Access-Control-Allow-Origin", "*")
+            call.respondText(
+                """{"error":"arp_table出错"}""",
+                ContentType.Application.Json,
+                HttpStatusCode.InternalServerError
+            )
+        }
+    }
 }
